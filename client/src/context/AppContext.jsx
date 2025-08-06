@@ -143,8 +143,19 @@ export const AppContextProvider = (props) => {
     // Fetch User's Data if User is Logged In
     useEffect(() => {
         if (user) {
+            // Check if user is educator from Clerk metadata
+            if (user.publicMetadata?.role === 'educator') {
+                setIsEducator(true)
+            }
             fetchUserData()
             fetchUserEnrolledCourses()
+        }
+    }, [user])
+
+    // Reset educator status when user logs out
+    useEffect(() => {
+        if (!user) {
+            setIsEducator(false)
         }
     }, [user])
 
