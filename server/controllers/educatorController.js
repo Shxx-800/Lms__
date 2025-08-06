@@ -3,27 +3,90 @@ import Course from '../models/Course.js';
 import { Purchase } from '../models/Purchase.js';
 import User from '../models/User.js';
 import { clerkClient } from '@clerk/express'
+import EducatorRequest from '../models/EducatorRequest.js';
 
-// update role to educator
-export const updateRoleToEducator = async (req, res) => {
-
+// Request to become educator
+export const requestEducatorRole = async (req, res) => {
     try {
+        const userId = req.auth.userId;
+        const { requestMessage } = req.body;
 
-        const userId = req.auth.userId
+        // Check if user already has a pending or approved request
+        const existingRequest = await EducatorRequest.findOne({ 
+            userId, 
+            status: { $in: ['pending', 'approved'] } 
+        });
 
+        if (existingRequest) {
+            if (existingRequest.status === 'approved') {
+                return res.json({ success: false, message: 'You are already an educator' });
+            }
+            return res.json({ success: false, message: 'Your request is already pending approval' });
+        }
+
+        // Create new educator request
+        await EducatorRequest.create({
+            userId,
+            requestMessage: requestMessage || ''
+        });
+
+        res.json({ success: true, message: 'Your request to become an educator has been submitted for admin approval' });
+    } catch (error) {
+        res.json({ success: false, message: error.message });
+    }
+};
+
+// Check educator request status
+export const getEducatorRequestStatus = async (req, res) => {
+    try {
+        const userId = req.auth.userId;
+
+        const request = await EducatorRequest.findOne({ userId }).sort({ createdAt: -1 });
+
+        if (!request) {
+            return res.json({ success: true, status: 'none' });
+        }
+
+        res.json({ 
+            success: true, 
+            status: request.status,
+            requestMessage: request.requestMessage,
+            adminResponse: request.adminResponse,
+            createdAt: request.createdAt,
+            reviewedAt: request.reviewedAt
+        });
+    } catch (error) {
+        res.json({ success: false, message: error.message });
+    }
+};
+
+// update role to educator (kept for backward compatibility but now requires admin approval)
+export const updateRoleToEducator = async (req, res) => {
+    try {
+        const userId = req.auth.userId;
+
+        // Check if user has approved educator request
+        const approvedRequest = await EducatorRequest.findOne({ 
+            userId, 
+            status: 'approved' 
+        });
+
+        if (!approvedRequest) {
+            return res.json({ success: false, message: 'You need admin approval to become an educator' });
+        }
+
+        // Update role in Clerk (this should already be done by admin, but double-check)
         await clerkClient.users.updateUserMetadata(userId, {
             publicMetadata: {
                 role: 'educator',
             },
-        })
+        });
 
-        res.json({ success: true, message: 'You can publish a course now' })
-
+        res.json({ success: true, message: 'You can publish a course now' });
     } catch (error) {
-        res.json({ success: false, message: error.message })
+        res.json({ success: false, message: error.message });
     }
-
-}
+};
 
 // Add New Course
 export const addCourse = async (req, res) => {

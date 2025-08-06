@@ -6,7 +6,7 @@ import { AppContext } from '../../context/AppContext'
 
 const Navbar = () => {
 
-  const {navigate, isEducator, setIsEducator} = useContext(AppContext)
+  const {navigate, isEducator, setIsEducator, backendUrl} = useContext(AppContext)
 
 const isCourseListPage = location.pathname.includes('/course-list');
 
@@ -24,24 +24,59 @@ const {user} = useUser()
         return
       }
 
-      // Call API to update role to educator
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/educator/update-role`, {
+      // Check if user is admin
+      if (user.publicMetadata?.role === 'admin') {
+        navigate('/admin')
+        return
+      }
+
+      // Check current request status
+      const statusResponse = await fetch(`${backendUrl}/api/educator/request-status`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${await window.Clerk.session.getToken()}`
         }
       })
 
+      const statusData = await statusResponse.json()
+      
+      if (statusData.success) {
+        if (statusData.status === 'approved') {
+          setIsEducator(true)
+          navigate('/educator')
+          return
+        } else if (statusData.status === 'pending') {
+          alert('Your educator request is pending admin approval')
+          return
+        } else if (statusData.status === 'rejected') {
+          alert('Your educator request was rejected. You can submit a new request.')
+        }
+      }
+
+      // Show request form
+      const requestMessage = prompt('Please provide a brief message about why you want to become an educator:')
+      if (!requestMessage) return
+
+      // Submit educator request
+      const response = await fetch(`${backendUrl}/api/educator/request-role`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await window.Clerk.session.getToken()}`
+        },
+        body: JSON.stringify({ requestMessage })
+      })
+
       const data = await response.json()
       
       if (data.success) {
-        setIsEducator(true)
-        navigate('/educator')
+        alert(data.message)
       } else {
-        console.error('Failed to become educator:', data.message)
+        alert(data.message)
       }
     } catch (error) {
       console.error('Error becoming educator:', error)
+      alert('An error occurred. Please try again.')
     }
   }
 
@@ -52,6 +87,9 @@ const {user} = useUser()
         <div className='flex items-center gap-5'>
          { user && 
          <>
+           {user.publicMetadata?.role === 'admin' && (
+             <button onClick={() => navigate('/admin')} className="text-red-600 font-medium">Admin Panel</button>
+           )}
            <button onClick={handleBecomeEducator}>{isEducator ? 'Educator Dashboard' : 'Become Educator'}</button>
           | <Link to='/my-enrollments'>My Enrollments</Link>
           </>
@@ -68,6 +106,9 @@ const {user} = useUser()
         <div className='flex items-center gap-1 sm:gap-2 max-sm:text-xs'>
          { user && 
          <>
+          {user.publicMetadata?.role === 'admin' && (
+            <button onClick={() => navigate('/admin')} className="text-red-600 font-medium text-xs">Admin</button>
+          )}
           <button onClick={handleBecomeEducator}>{isEducator ? 'Educator Dashboard' : 'Become Educator'}</button>
           | <Link to='/my-enrollments'>My Enrollments</Link>
           </>
